@@ -201,7 +201,7 @@ int main() {
   	map_waypoints_dy.push_back(d_y);
   }
 	int lane = 1;
-	double ref_velocity = 90.0; //kmph
+	double ref_velocity = 0.0; //mph
   h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy,&lane,&ref_velocity](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
@@ -239,13 +239,65 @@ int main() {
           	// Sensor Fusion Data, a list of all other cars on the same side of the road.
           	auto sensor_fusion = j[1]["sensor_fusion"];
 
-          	json msgJson;
-
 						//Mycode 
 						double pos_x;
 						double pos_y;
 						double angle;
 						int prev_size = previous_path_x.size();
+
+						//Check for other cars - for planning future
+						if(prev_size > 0){
+							car_s = end_path_s;
+						}
+
+						bool too_close = false;
+
+						//find refv to use 
+						for(int i =0; i< sensor_fusion.size();i++){
+							
+							//identify lane of the traffic vehicle
+							float d = sensor_fusion[i][6];
+							int car_lane = 0;
+							if(d >= 0 && d < 4)
+								car_lane = 0;
+							else if(d<8)
+								car_lane = 1;
+							else if(d<12)
+								car_lane = 2;
+							else
+								continue;
+							if(car_lane == lane){
+								//calculate traffic cars, future s
+								double vx = sensor_fusion[i][3];
+								double vy = sensor_fusion[i][4];
+								double check_speed = sqrt(vx*vx + vy*vy);
+								double check_car_s = sensor_fusion[i][5];
+								
+								//Position of car in future
+								check_car_s += ((double)prev_size*0.02*check_speed);
+
+								//check if it falls in the gap of the ego interrupting safety
+								if((check_car_s > car_s) && ((check_car_s - car_s)<30) ){
+									//TODO about to collide in future, do something  - reduce speed/change lane etc
+									too_close = true;
+									if(lane >0)
+									{
+										lane = 0;
+									}
+								}
+							}
+						}
+
+						if(too_close)
+						{
+							ref_velocity -= .224;
+
+						}
+						else if(ref_velocity < 49.5)
+						{
+							ref_velocity += .224;
+						}
+
 
 						//create a path with points sparsely placed at 30 mts then smoothen the points
 						vector<double> ptsx;
@@ -293,7 +345,7 @@ int main() {
 						ptsx.push_back(next_wp1[0]);
 						ptsx.push_back(next_wp2[0]);
 
-						cout<<" xpts "<<next_wp0[0]<<" "<<next_wp1[0]<<" "<<next_wp2[0]<<endl;
+						// cout<<" xpts "<<next_wp0[0]<<" "<<next_wp1[0]<<" "<<next_wp2[0]<<endl;
 
 						ptsy.push_back(next_wp0[1]);
 						ptsy.push_back(next_wp1[1]);
@@ -306,17 +358,17 @@ int main() {
 
 							ptsx[i] = (shift_x*cos(0-ref_yaw) - shift_y*sin(0-ref_yaw));
 							ptsy[i] = (shift_x*sin(0-ref_yaw) + shift_y*cos(0-ref_yaw));
-							cout<<ptsx[i]<<"   "<<ptsy[i]<<endl;
+							// cout<<ptsx[i]<<"   "<<ptsy[i]<<endl;
 						}
 
 						tk::spline s;
 
 						s.set_points(ptsx,ptsy);
 
-          	vector<double> next_x_vals;
-          	vector<double> next_y_vals;
+						vector<double> next_x_vals;
+						vector<double> next_y_vals;
 						//use previous points if they exist
-						cout<<"where is it failing?"<<endl;
+						// cout<<"where is it failing?"<<endl;
 						for(int i = 0; i < previous_path_x.size(); i++)
 						{
 								next_x_vals.push_back(previous_path_x[i]);
@@ -329,11 +381,9 @@ int main() {
 						double target_x = 30;
 						double target_y = s(target_x);
 						double target_dist = sqrt(target_x*target_x + target_y*target_y);
-
-
 						double x_add_on = 0;
-						cout<<"new points"<<endl;
-
+						// cout<<"new points"<<endl;
+						//Fill the spline 
 						for(int i =0;i <= 50-previous_path_x.size();i++){
 							double N = (target_dist/(0.02*ref_velocity/2.24));
 							double x_point = x_add_on + (target_x)/N;
@@ -353,7 +403,7 @@ int main() {
 
 							next_x_vals.push_back(x_point);
 							next_y_vals.push_back(y_point);
-							cout<<x_point<<""<<y_point<<endl;
+							// cout<<x_point<<" "<<y_point<<endl;
 						}
 						// cout<<"path"<<endl;
 						// for(int j =0; j< next_x_vals.size();j++){
@@ -366,8 +416,8 @@ int main() {
 						//Mycode end
 
 
-
           	// TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
+						json msgJson;
           	msgJson["next_x"] = next_x_vals;
           	msgJson["next_y"] = next_y_vals;
 
