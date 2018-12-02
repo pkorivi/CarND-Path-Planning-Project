@@ -208,7 +208,6 @@ int main() {
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
     //auto sdata = string(data).substr(0, length);
-    //cout << sdata << endl;
     if (length && length > 2 && data[0] == '4' && data[1] == '2') {
 
       auto s = hasData(data);
@@ -239,7 +238,7 @@ int main() {
           	// Sensor Fusion Data, a list of all other cars on the same side of the road.
           	auto sensor_fusion = j[1]["sensor_fusion"];
 
-						//Mycode 
+						//Planning code 
 						double pos_x;
 						double pos_y;
 						double angle;
@@ -249,7 +248,7 @@ int main() {
 						if(prev_size > 0){
 							car_s = end_path_s;
 						}
-						cout<<"new begin ----------------------------"<<endl;
+
 						bool too_close = false;
 						bool car_left = false;
 						bool car_right = false;
@@ -268,7 +267,7 @@ int main() {
 								car_lane = 2;
 							else
 								continue;
-							//cout<<"obst: "<<car_lane<<"  "<<lane<<endl;
+							
 							
 							//calculate traffic cars, future s
 							double vx = sensor_fusion[i][3];
@@ -281,36 +280,23 @@ int main() {
 							//min gap to vehicles in mts
 							double gap = 30;
 
-							//check in same lane as car
+							//check in same lane as car and the flag is not set
 							if(car_lane == lane && !too_close){
-								// check if it falls in the gap of the ego interrupting safety
-								// if((check_car_s > car_s) && ((check_car_s - car_s)<gap)){
-								// 	too_close = true;
-								// 	cout<<"-----inside  "<< too_close<<endl;
-								// }
 								too_close = ((check_car_s > car_s) && ((check_car_s - car_s)<gap));
-								cout<<"too_Close  "<<too_close<<endl;
+
 							}
-							//check for car in right lane of ego
+							//check for car in right lane of ego and flag is not set
 							else if(car_lane - lane ==1 && !car_right){
-								// if((car_s- gap < check_car_s ) &&(car_s + gap > check_car_s )){
-								// 	car_right = true;
-								// }
 								car_right = ((car_s- gap < check_car_s ) &&(car_s + gap > check_car_s ));
-								// cout<<"car_right  "<<car_right<<endl;
 							}
+							//check for car in left lane of ego and flag is not set
 							else if(lane - car_lane ==1 && !car_left){
-								// if((car_s- gap < check_car_s ) &&(car_s + gap > check_car_s ) ){
-								// 	car_left = true;
-								// }
 								car_left = ((car_s- gap < check_car_s ) &&(car_s + gap > check_car_s ));
-								// cout<<"car_left  "<<car_left<<endl;
 							}
 						}
 						double acceleration = 0.224;
 						double max_vel = 49.5;
-						//CAR IS AHEAD
-						cout<<"fucked up too_Close  "<<too_close<<endl;
+						//Car ahead is too close
 						if(too_close)
 						{
 							// check if you can change lane to left
@@ -323,9 +309,8 @@ int main() {
 							}
 							//no lane chnage possible - decelerate
 							else{
-								ref_velocity -= .224;
+								ref_velocity -= acceleration;
 							}
-							cout<<" lane decision "<<lane<<" "<<car_left<<"  "<<car_right<<endl;
 						}
 						else
 						{
@@ -338,12 +323,9 @@ int main() {
 
 							if(ref_velocity < max_vel)
 							{
-								ref_velocity += .224;
+								ref_velocity += acceleration;
 							}
-
 						}
-						
-
 
 						//create a path with points sparsely placed at 30 mts then smoothen the points
 						vector<double> ptsx;
@@ -391,8 +373,6 @@ int main() {
 						ptsx.push_back(next_wp1[0]);
 						ptsx.push_back(next_wp2[0]);
 
-						// cout<<" xpts "<<next_wp0[0]<<" "<<next_wp1[0]<<" "<<next_wp2[0]<<endl;
-
 						ptsy.push_back(next_wp0[1]);
 						ptsy.push_back(next_wp1[1]);
 						ptsy.push_back(next_wp2[1]);
@@ -404,7 +384,6 @@ int main() {
 
 							ptsx[i] = (shift_x*cos(0-ref_yaw) - shift_y*sin(0-ref_yaw));
 							ptsy[i] = (shift_x*sin(0-ref_yaw) + shift_y*cos(0-ref_yaw));
-							// cout<<ptsx[i]<<"   "<<ptsy[i]<<endl;
 						}
 
 						tk::spline s;
@@ -414,12 +393,10 @@ int main() {
 						vector<double> next_x_vals;
 						vector<double> next_y_vals;
 						//use previous points if they exist
-						// cout<<"where is it failing?"<<endl;
 						for(int i = 0; i < previous_path_x.size(); i++)
 						{
 								next_x_vals.push_back(previous_path_x[i]);
 								next_y_vals.push_back(previous_path_y[i]);
-								// cout<<previous_path_x[i]<<""<<previous_path_y[i]<<endl;
 						}
 
 						//After transformation we want to drive 30 mts ahead
@@ -428,7 +405,6 @@ int main() {
 						double target_y = s(target_x);
 						double target_dist = sqrt(target_x*target_x + target_y*target_y);
 						double x_add_on = 0;
-						// cout<<"new points"<<endl;
 						//Fill the spline 
 						for(int i =0;i <= 50-previous_path_x.size();i++){
 							double N = (target_dist/(0.02*ref_velocity/2.24));
@@ -449,17 +425,8 @@ int main() {
 
 							next_x_vals.push_back(x_point);
 							next_y_vals.push_back(y_point);
-							// cout<<x_point<<" "<<y_point<<endl;
 						}
-						// cout<<"path"<<endl;
-						// for(int j =0; j< next_x_vals.size();j++){
-						// 	cout<<next_x_vals[j]<<" "<<next_y_vals[j]<<endl;
-						// }
-
-
-
-
-						//Mycode end
+						//Planning code end
 
 
           	// TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
