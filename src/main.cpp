@@ -249,14 +249,16 @@ int main() {
 						if(prev_size > 0){
 							car_s = end_path_s;
 						}
-
+						cout<<"new begin ----------------------------"<<endl;
 						bool too_close = false;
+						bool car_left = false;
+						bool car_right = false;
 
-						//find refv to use 
-						for(int i =0; i< sensor_fusion.size();i++){
-							
+						//browse through sensor fusion data for finding the right lane to drive and right speed
+						for(int i =0; i< sensor_fusion.size();i++){	
 							//identify lane of the traffic vehicle
 							float d = sensor_fusion[i][6];
+							//Identify the driving lane of obstacle 
 							int car_lane = 0;
 							if(d >= 0 && d < 4)
 								car_lane = 0;
@@ -266,37 +268,81 @@ int main() {
 								car_lane = 2;
 							else
 								continue;
-							if(car_lane == lane){
-								//calculate traffic cars, future s
-								double vx = sensor_fusion[i][3];
-								double vy = sensor_fusion[i][4];
-								double check_speed = sqrt(vx*vx + vy*vy);
-								double check_car_s = sensor_fusion[i][5];
-								
-								//Position of car in future
-								check_car_s += ((double)prev_size*0.02*check_speed);
+							//cout<<"obst: "<<car_lane<<"  "<<lane<<endl;
+							
+							//calculate traffic cars, future s
+							double vx = sensor_fusion[i][3];
+							double vy = sensor_fusion[i][4];
+							double check_speed = sqrt(vx*vx + vy*vy);
+							double check_car_s = sensor_fusion[i][5];
+							
+							//Position of car in future
+							check_car_s += ((double)prev_size*0.02*check_speed);
+							//min gap to vehicles in mts
+							double gap = 30;
 
-								//check if it falls in the gap of the ego interrupting safety
-								if((check_car_s > car_s) && ((check_car_s - car_s)<30) ){
-									//TODO about to collide in future, do something  - reduce speed/change lane etc
-									too_close = true;
-									if(lane >0)
-									{
-										lane = 0;
-									}
-								}
+							//check in same lane as car
+							if(car_lane == lane && !too_close){
+								// check if it falls in the gap of the ego interrupting safety
+								// if((check_car_s > car_s) && ((check_car_s - car_s)<gap)){
+								// 	too_close = true;
+								// 	cout<<"-----inside  "<< too_close<<endl;
+								// }
+								too_close = ((check_car_s > car_s) && ((check_car_s - car_s)<gap));
+								cout<<"too_Close  "<<too_close<<endl;
+							}
+							//check for car in right lane of ego
+							else if(car_lane - lane ==1 && !car_right){
+								// if((car_s- gap < check_car_s ) &&(car_s + gap > check_car_s )){
+								// 	car_right = true;
+								// }
+								car_right = ((car_s- gap < check_car_s ) &&(car_s + gap > check_car_s ));
+								// cout<<"car_right  "<<car_right<<endl;
+							}
+							else if(lane - car_lane ==1 && !car_left){
+								// if((car_s- gap < check_car_s ) &&(car_s + gap > check_car_s ) ){
+								// 	car_left = true;
+								// }
+								car_left = ((car_s- gap < check_car_s ) &&(car_s + gap > check_car_s ));
+								// cout<<"car_left  "<<car_left<<endl;
 							}
 						}
-
+						double acceleration = 0.224;
+						double max_vel = 49.5;
+						//CAR IS AHEAD
+						cout<<"fucked up too_Close  "<<too_close<<endl;
 						if(too_close)
 						{
-							ref_velocity -= .224;
+							// check if you can change lane to left
+							if(!car_left && lane>0){
+								lane--;
+							} 
+							//shift to right
+							else if(!car_right && lane <2){
+								lane++;
+							}
+							//no lane chnage possible - decelerate
+							else{
+								ref_velocity -= .224;
+							}
+							cout<<" lane decision "<<lane<<" "<<car_left<<"  "<<car_right<<endl;
+						}
+						else
+						{
+							//change back to center lane if possible
+							if(lane != 1){
+								if((lane == 0 && !car_right) || (lane==2 && !car_left)){
+									lane = 1;
+								}
+							}
+
+							if(ref_velocity < max_vel)
+							{
+								ref_velocity += .224;
+							}
 
 						}
-						else if(ref_velocity < 49.5)
-						{
-							ref_velocity += .224;
-						}
+						
 
 
 						//create a path with points sparsely placed at 30 mts then smoothen the points
